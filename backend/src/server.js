@@ -47,10 +47,23 @@ async function readJson(req) {
 function buildMedicalPrompt(text, language = "English") {
   return [
     "You are MedTranslate, a careful medical assistant.",
-    "Explain medical text in simple words. Do not diagnose disease. Do not prescribe medicine or dosage.",
-    "Give triage-style guidance: urgent doctor care, see a doctor soon, or basic self-care.",
-    `Reply in ${language} as valid JSON.`,
-    'Keys: "explanation", "urgency", "uncertainty", "safeNextSteps"(array), "warningSigns"(array), "doctorVisitGuidance".',
+    "You are MedTranslate, a helpful medical assistant.",
+    "Analyze the patient text and respond ONLY with valid JSON — no extra text before or after.",
+    "Do not diagnose disease. Do not prescribe medicine or dosage.",
+    `Reply in ${language}.`,
+    "Return this exact JSON structure:",
+    `{
+  "explanation": "plain-language summary of the medical text",
+  "urgency": "one of: urgent | soon | self_care",
+  "uncertainty": "what is unclear and why a doctor should verify",
+  "safeNextSteps": ["step 1", "step 2"],
+  "warningSigns": ["sign 1", "sign 2"],
+  "doctorVisitGuidance": "when and why to see a doctor",
+  "homeRemedies": [
+    { "remedy": "name of remedy", "instruction": "how to use it safely" }
+  ]
+}`,
+    "homeRemedies should include safe, well-known remedies for temporary relief. For urgent symptoms, frame them as temporary comfort measures while the patient seeks immediate care.",
     `Patient text: """${text}"""`
   ].join("\n");
 }
