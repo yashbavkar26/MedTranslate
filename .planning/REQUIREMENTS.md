@@ -30,20 +30,20 @@ Requirements for initial hackathon release. Each maps to roadmap phases.
 
 ### Model Integration
 
-- [ ] **LLM-01**: Backend sends normalized report, text, and voice-derived input to a local Ollama medical model.
-- [ ] **LLM-02**: Backend structures prompts so responses include explanation, urgency, safe next steps, and uncertainty.
-- [ ] **LLM-03**: Backend prevents unsupported diagnosis, prescription, or definitive treatment claims in user-facing responses.
+- [x] **LLM-01**: Backend sends normalized report, text, and voice-derived input to a local Ollama medical model.
+- [x] **LLM-02**: Backend structures prompts so responses include explanation, urgency, safe next steps, and uncertainty.
+- [x] **LLM-03**: Backend prevents unsupported diagnosis, prescription, or definitive treatment claims in user-facing responses.
 
 ### Clients
 
 - [ ] **WEB-01**: Desktop web user can submit report, text, or voice input and view the response.
 - [ ] **MOB-01**: Flutter mobile user can submit report, text, or voice input and view the response.
-- [ ] **API-01**: Web and Flutter clients use a shared backend API for analysis requests and responses.
+- [x] **API-01**: Web and Flutter clients use a shared backend API for analysis requests and responses.
 
 ### Safety and Accessibility
 
-- [ ] **SAFE-01**: User sees a clear medical safety notice that MedTranslate explains and guides but does not diagnose or replace a doctor.
-- [ ] **SAFE-02**: User receives urgent-care language when red-flag symptoms or severe report concerns are detected.
+- [x] **SAFE-01**: User sees a clear medical safety notice that MedTranslate explains and guides but does not diagnose or replace a doctor.
+- [x] **SAFE-02**: User receives urgent-care language when red-flag symptoms or severe report concerns are detected.
 - [ ] **ACCS-01**: Responses are written in simple language suitable for low-literacy users.
 
 ## v2 Requirements
@@ -95,14 +95,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GUID-02 | Phase 3 | Pending |
 | GUID-03 | Phase 3 | Pending |
 | GUID-04 | Phase 3 | Pending |
-| LLM-01 | Phase 1 | Pending |
-| LLM-02 | Phase 1 | Pending |
-| LLM-03 | Phase 1 | Pending |
+| LLM-01 | Phase 1 | Complete |
+| LLM-02 | Phase 1 | Complete |
+| LLM-03 | Phase 1 | Complete |
 | WEB-01 | Phase 4 | Pending |
 | MOB-01 | Phase 5 | Pending |
-| API-01 | Phase 1 | Pending |
-| SAFE-01 | Phase 1 | Pending |
-| SAFE-02 | Phase 1 | Pending |
+| API-01 | Phase 1 | Complete |
+| SAFE-01 | Phase 1 | Complete |
+| SAFE-02 | Phase 1 | Complete |
 | ACCS-01 | Phase 3 | Pending |
 
 **Coverage:**
