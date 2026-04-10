@@ -83,33 +83,33 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INPT-01 | TBD | Pending |
-| INPT-02 | TBD | Pending |
-| INPT-03 | TBD | Pending |
-| INPT-04 | TBD | Pending |
-| INPT-05 | TBD | Pending |
-| RPT-01 | TBD | Pending |
-| RPT-02 | TBD | Pending |
-| RPT-03 | TBD | Pending |
-| GUID-01 | TBD | Pending |
-| GUID-02 | TBD | Pending |
-| GUID-03 | TBD | Pending |
-| GUID-04 | TBD | Pending |
-| LLM-01 | TBD | Pending |
-| LLM-02 | TBD | Pending |
-| LLM-03 | TBD | Pending |
-| WEB-01 | TBD | Pending |
-| MOB-01 | TBD | Pending |
-| API-01 | TBD | Pending |
-| SAFE-01 | TBD | Pending |
-| SAFE-02 | TBD | Pending |
-| ACCS-01 | TBD | Pending |
+| INPT-01 | Phase 2 | Pending |
+| INPT-02 | Phase 3 | Pending |
+| INPT-03 | Phase 3 | Pending |
+| INPT-04 | Phase 3 | Pending |
+| INPT-05 | Phase 3 | Pending |
+| RPT-01 | Phase 2 | Pending |
+| RPT-02 | Phase 2 | Pending |
+| RPT-03 | Phase 2 | Pending |
+| GUID-01 | Phase 3 | Pending |
+| GUID-02 | Phase 3 | Pending |
+| GUID-03 | Phase 3 | Pending |
+| GUID-04 | Phase 3 | Pending |
+| LLM-01 | Phase 1 | Pending |
+| LLM-02 | Phase 1 | Pending |
+| LLM-03 | Phase 1 | Pending |
+| WEB-01 | Phase 4 | Pending |
+| MOB-01 | Phase 5 | Pending |
+| API-01 | Phase 1 | Pending |
+| SAFE-01 | Phase 1 | Pending |
+| SAFE-02 | Phase 1 | Pending |
+| ACCS-01 | Phase 3 | Pending |
 
 **Coverage:**
 - v1 requirements: 21 total
-- Mapped to phases: 0
-- Unmapped: 21
+- Mapped to phases: 21
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-10*
-*Last updated: 2026-04-10 after initial definition*
+*Last updated: 2026-04-10 after roadmap creation*
