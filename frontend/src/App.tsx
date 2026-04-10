@@ -3,6 +3,7 @@ import { Upload, History, Settings, AlertTriangle, Shield, Send, Clock, CheckCir
 import { Canvas, useFrame } from '@react-three/fiber';
 import { useGLTF, Stage, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
+import BodyMap, { detectAffectedOrgans, OrganId } from './BodyMap';
 
 function AnatomyModel() {
   const { scene } = useGLTF('/front_body_anatomy.glb');
@@ -24,6 +25,7 @@ interface MedicalResult {
   summary: string;
   advice: string;
   triage: 'Red' | 'Yellow' | 'Green';
+  affectedOrgans: OrganId[];
 }
 
 interface AccessibilitySettings {
@@ -112,11 +114,19 @@ const App: React.FC = () => {
   const runAnalysis = () => {
     setIsAnalyzing(true);
     setTimeout(() => {
+      // Use the symptom text if in text mode, otherwise use mock PDF report text
+      const reportText = inputMode === 'text' && symptomText.trim()
+        ? symptomText
+        : 'Your hemoglobin is 10.2 g/dL. This is slightly low (anemia). Liver function tests show elevated ALT. Blood sugar levels indicate pre-diabetes. Kidney function (creatinine) is borderline.';
+
+      const detectedOrgans = detectAffectedOrgans(reportText);
+
       const mockResult: MedicalResult = {
         date: new Date().toLocaleDateString(),
         summary: "summary",
         advice: "advice",
-        triage: "Yellow"
+        triage: "Yellow",
+        affectedOrgans: detectedOrgans
       };
       setResult(mockResult);
       setHistory(prev => [mockResult, ...prev]);
@@ -293,16 +303,25 @@ const App: React.FC = () => {
             {isAnalyzing && <p className="text-center animate-pulse text-blue-500 font-bold uppercase tracking-widest text-xs">Analyzing with RAG Pipeline...</p>}
 
             {result && !isAnalyzing && (
-              <div style={{ backgroundColor: themeColors.card }} className={`rounded-3xl border-l-[16px] p-8 shadow-xl animate-slide-in ${result.triage === 'Yellow' ? 'border-yellow-500' : 'border-red-500'}`}>
-                <h3 className="text-sm font-black uppercase tracking-widest flex items-center gap-2 mb-4 opacity-50">
-                  <AlertTriangle size={18} className={result.triage === 'Yellow' ? 'text-yellow-500' : 'text-red-500'} /> {t[language].triage}
-                </h3>
-                <p className="text-2xl font-bold leading-snug mb-8">"{t[language].summary}"</p>
-                <div style={{ backgroundColor: isDark ? '#0f172a' : '#f1f5f9', borderColor: themeColors.border }} className="p-6 rounded-2xl border">
-                  <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">{t[language].next}:</p>
-                  <p className="text-sm opacity-80">{t[language].advice}</p>
+              <>
+                <div style={{ backgroundColor: themeColors.card }} className={`rounded-3xl border-l-[16px] p-8 shadow-xl animate-slide-in ${result.triage === 'Yellow' ? 'border-yellow-500' : 'border-red-500'}`}>
+                  <h3 className="text-sm font-black uppercase tracking-widest flex items-center gap-2 mb-4 opacity-50">
+                    <AlertTriangle size={18} className={result.triage === 'Yellow' ? 'text-yellow-500' : 'text-red-500'} /> {t[language].triage}
+                  </h3>
+                  <p className="text-2xl font-bold leading-snug mb-8">"{t[language].summary}"</p>
+                  <div style={{ backgroundColor: isDark ? '#0f172a' : '#f1f5f9', borderColor: themeColors.border }} className="p-6 rounded-2xl border">
+                    <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">{t[language].next}:</p>
+                    <p className="text-sm opacity-80">{t[language].advice}</p>
+                  </div>
                 </div>
-              </div>
+
+                {/* 2D BODY MAP — shows affected organs */}
+                {result.affectedOrgans.length > 0 && (
+                  <div style={{ backgroundColor: themeColors.card, borderColor: themeColors.border }} className="rounded-3xl border p-8 shadow-xl animate-slide-in">
+                    <BodyMap affectedOrgans={result.affectedOrgans} isDark={isDark} />
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
