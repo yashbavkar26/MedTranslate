@@ -81,34 +81,70 @@ html.dyslexic-font {
   font-family: 'OpenDyslexic', monospace !important;
 }
 
-html.high-contrast {
+/* Light Mode High Contrast */
+html.high-contrast:not(.dark) {
+  @apply bg-white text-black;
+  color-scheme: light;
+}
+
+html.high-contrast:not(.dark) body {
+  @apply bg-white text-black;
+}
+
+html.high-contrast:not(.dark) button,
+html.high-contrast:not(.dark) input,
+html.high-contrast:not(.dark) textarea,
+html.high-contrast:not(.dark) select,
+html.high-contrast:not(.dark) a {
+  @apply border-2 border-black text-black;
+}
+
+html.high-contrast:not(.dark) .card,
+html.high-contrast:not(.dark) .card-dark {
+  @apply bg-white border-2 border-black text-black;
+}
+
+html.high-contrast:not(.dark) .input-field {
+  @apply bg-white text-black border-2 border-black;
+}
+
+html.high-contrast:not(.dark) .button-primary {
+  @apply border-2 border-black text-black bg-white;
+}
+
+html.high-contrast:not(.dark) .button-secondary {
+  @apply border-2 border-black text-black bg-white;
+}
+
+/* Dark Mode High Contrast */
+html.dark.high-contrast {
   @apply bg-black text-white;
   color-scheme: dark;
 }
 
-html.high-contrast body {
+html.dark.high-contrast body {
   @apply bg-black text-white;
 }
 
-html.high-contrast button,
-html.high-contrast input,
-html.high-contrast textarea,
-html.high-contrast select,
-html.high-contrast a {
+html.dark.high-contrast button,
+html.dark.high-contrast input,
+html.dark.high-contrast textarea,
+html.dark.high-contrast select,
+html.dark.high-contrast a {
   @apply border-2 border-white;
 }
 
-html.high-contrast .card,
-html.high-contrast .card-dark {
+html.dark.high-contrast .card,
+html.dark.high-contrast .card-dark {
   @apply bg-black border-2 border-white text-white;
 }
 
-html.high-contrast .input-field {
+html.dark.high-contrast .input-field {
   @apply bg-black text-white border-2 border-white;
 }
 
-html.high-contrast .button-primary,
-html.high-contrast .button-secondary {
+html.dark.high-contrast .button-primary,
+html.dark.high-contrast .button-secondary {
   @apply border-2 border-white;
 }
 
