@@ -14,7 +14,7 @@ Users can turn medical report data, voice concerns, or symptom text into clear E
 
 ### Validated
 
-(None yet - ship to validate)
+- [x] The system runs inference through a local Ollama medical model on the developer laptop. (Validated in Phase 1: Backend Safety Foundation)
 
 ### Active
 
@@ -24,7 +24,6 @@ Users can turn medical report data, voice concerns, or symptom text into clear E
 - [ ] User can ask questions about an uploaded report and receive answers grounded in the report content.
 - [ ] User can see whether a result or concern may need immediate doctor attention, routine follow-up, or basic self-care.
 - [ ] User can use the product in English and Hindi.
-- [ ] The system runs inference through a local Ollama medical model on the developer laptop.
 - [ ] The product is available through both a desktop web interface and a Flutter mobile app.
 
 ### Out of Scope
