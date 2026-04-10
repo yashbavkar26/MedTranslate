@@ -11,7 +11,7 @@ MedTranslate will be built as a shared backend with two thin clients: a desktop 
 | # | Phase | Goal | Requirements | UI hint |
 |---|-------|------|--------------|---------|
 | 1 | Backend Safety Foundation | Establish the shared API, Ollama adapter, structured response contract, and medical safety guardrails | Complete    | 2026-04-10 |
-| 2 | Report Understanding | Let users upload blood test reports, extract content, explain notable values, and ask report-grounded questions | INPT-01, RPT-01, RPT-02, RPT-03 | yes |
+| 2 | Report Understanding | Let users upload blood test reports, extract content, explain notable values, and ask report-grounded questions | Complete    | 2026-04-10 |
 | 3 | Multilingual Symptom and Voice Flow | Support typed and spoken concerns, transcript confirmation, English/Hindi output, urgency guidance, and simple low-literacy responses | INPT-02, INPT-03, INPT-04, INPT-05, GUID-01, GUID-02, GUID-03, GUID-04, ACCS-01 | yes |
 | 4 | Desktop Web Demo | Build the desktop web experience for report, text, and voice flows against the shared backend | WEB-01 | yes |
 | 5 | Flutter Mobile Demo | Build the Flutter mobile experience for report, text, and voice flows against the shared backend | MOB-01 | yes |

@@ -9,7 +9,7 @@ Requirements for initial hackathon release. Each maps to roadmap phases.
 
 ### Inputs
 
-- [ ] **INPT-01**: User can upload a blood test report file for analysis.
+- [x] **INPT-01**: User can upload a blood test report file for analysis.
 - [ ] **INPT-02**: User can type a health concern or symptom description.
 - [ ] **INPT-03**: User can provide a health concern through voice input.
 - [ ] **INPT-04**: User can review and confirm the voice transcript before it is analyzed.
@@ -17,9 +17,9 @@ Requirements for initial hackathon release. Each maps to roadmap phases.
 
 ### Report Understanding
 
-- [ ] **RPT-01**: User receives a short plain-language summary of an uploaded report.
-- [ ] **RPT-02**: User can see abnormal or notable report values explained in simple language.
-- [ ] **RPT-03**: User can ask questions about the uploaded report and receive answers grounded in the report content.
+- [x] **RPT-01**: User receives a short plain-language summary of an uploaded report.
+- [x] **RPT-02**: User can see abnormal or notable report values explained in simple language.
+- [x] **RPT-03**: User can ask questions about the uploaded report and receive answers grounded in the report content.
 
 ### Symptom Guidance
 
@@ -83,14 +83,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INPT-01 | Phase 2 | Pending |
+| INPT-01 | Phase 2 | Complete |
 | INPT-02 | Phase 3 | Pending |
 | INPT-03 | Phase 3 | Pending |
 | INPT-04 | Phase 3 | Pending |
 | INPT-05 | Phase 3 | Pending |
-| RPT-01 | Phase 2 | Pending |
-| RPT-02 | Phase 2 | Pending |
-| RPT-03 | Phase 2 | Pending |
+| RPT-01 | Phase 2 | Complete |
+| RPT-02 | Phase 2 | Complete |
+| RPT-03 | Phase 2 | Complete |
 | GUID-01 | Phase 3 | Pending |
 | GUID-02 | Phase 3 | Pending |
 | GUID-03 | Phase 3 | Pending |
