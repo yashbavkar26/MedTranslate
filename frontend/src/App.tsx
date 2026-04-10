@@ -1,5 +1,22 @@
-import React, { useState, useEffect, ChangeEvent } from 'react';
+import React, { useState, useEffect, ChangeEvent, useRef, Suspense } from 'react';
 import { Upload, History, Settings, AlertTriangle, Shield, Send, Clock, CheckCircle, Moon, Sun, Type, ChevronRight, Lock, X, FileText, MessageSquare } from 'lucide-react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { useGLTF, Stage, OrbitControls } from '@react-three/drei';
+import * as THREE from 'three';
+
+function AnatomyModel() {
+  const { scene } = useGLTF('/front_body_anatomy.glb');
+  const meshRef = useRef<THREE.Group>(null!);
+
+  useFrame((state, delta) => {
+    if (meshRef.current) {
+      meshRef.current.rotation.y += delta * 0.5;
+    }
+  });
+
+  return <primitive ref={meshRef} object={scene} />;
+}
+useGLTF.preload('/front_body_anatomy.glb');
 
 // --- TYPES & INTERFACES ---
 interface MedicalResult {
@@ -26,7 +43,7 @@ const App: React.FC = () => {
   const [inputMode, setInputMode] = useState<InputMode>('pdf');
   const [language, setLanguage] = useState<Language>('English');
   const [accessibility, setAccessibility] = useState<AccessibilitySettings>({ dyslexic: false, highContrast: false });
-  const [isDark, setIsDark] = useState<boolean>(true); 
+  const [isDark, setIsDark] = useState<boolean>(true);
   const [history, setHistory] = useState<MedicalResult[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [result, setResult] = useState<MedicalResult | null>(null);
@@ -34,9 +51,9 @@ const App: React.FC = () => {
 
   // --- TRANSLATIONS (Updated with Input Mode Strings) ---
   const t: Record<Language, any> = {
-    English: { 
+    English: {
       welcome: "MedTranslate", subtitle: "AI Medical Translator & Triage",
-      upload: "Upload Lab Report", triage: "Triage Status", 
+      upload: "Upload Lab Report", triage: "Triage Status",
       history: "Medical History", analyze: "Analyze", next: "Next Steps",
       subtext: "Get plain-language summaries for any medical lab report PDF.",
       selectBtn: "SELECT REPORT", tools: "TOOLS", accessibilityTitle: "Accessibility Controls",
@@ -46,9 +63,9 @@ const App: React.FC = () => {
       typeSymptoms: "Type your symptoms", typePlaceholder: "Describe how you feel (e.g., chest pain, cough)...",
       submitSymptoms: "Analyze Symptoms"
     },
-    Hindi: { 
+    Hindi: {
       welcome: "मेडट्रांसलेट", subtitle: "एआई मेडिकल अनुवादक और ट्राइएज",
-      upload: "लैब रिपोर्ट अपलोड करें", triage: "स्थिति", 
+      upload: "लैब रिपोर्ट अपलोड करें", triage: "स्थिति",
       history: "चिकित्सा इतिहास", analyze: "विश्लेषण करें", next: "अगले कदम",
       subtext: "किसी भी मेडिकल लैब रिपोर्ट पीडीएफ के लिए सरल भाषा में सारांश प्राप्त करें।",
       selectBtn: "रिपोर्ट चुनें", tools: "उपकरण", accessibilityTitle: "एक्सेसिबिलिटी नियंत्रण",
@@ -58,9 +75,9 @@ const App: React.FC = () => {
       typeSymptoms: "अपने लक्षण लिखें", typePlaceholder: "बताएं कि आप कैसा महसूस कर रहे हैं...",
       submitSymptoms: "लक्षणों का विश्लेषण करें"
     },
-    Konkani: { 
+    Konkani: {
       welcome: "मेडट्रांसलेट", subtitle: "एआय वैजकी अणकारपी आनी ट्रायज",
-      upload: "लॅब रिपोर्ट अपलोड करा", triage: "स्थिती", 
+      upload: "लॅब रिपोर्ट अपलोड करा", triage: "स्थिती",
       history: "वैद्यकीय इतिहास", analyze: "तपासणी करा", next: "पुढील पावले",
       subtext: "खंयचेय मेडिकल लॅब रिपोर्ट पीडीएफ खातीर साद्या भाशेंत सारांश मेळयात।",
       selectBtn: "रिपोर्ट वेंचून काढा", tools: "साधनां", accessibilityTitle: "एक्सेसिबिलिटी नियंत्रण",
@@ -70,9 +87,9 @@ const App: React.FC = () => {
       typeSymptoms: "तुमचीं लक्षणां बरयात", typePlaceholder: "तुमकां कशें दिसता तें सांगात...",
       submitSymptoms: "लक्षणांची तपासणी करा"
     },
-    Tamil: { 
+    Tamil: {
       welcome: "மெட்டிரான்ஸ்லேட்", subtitle: "AI மருத்துவ மொழிபெயர்ப்பாளர் & ட்ரைஏஜ்",
-      upload: "ஆய்வக அறிக்கையைப் பதிவேற்றவும்", triage: "ட்ரைஏஜ் நிலை", 
+      upload: "ஆய்வக அறிக்கையைப் பதிவேற்றவும்", triage: "ட்ரைஏஜ் நிலை",
       history: "மருத்துவ வரலாறு", analyze: "பகுப்பாய்வு", next: "அடுத்த கட்டங்கள்",
       subtext: "எந்தவொரு மருத்துவ ஆய்வக அறிக்கை PDF க்கும் எளிய மொழி சுருக்கத்தைப் பெறுங்கள்.",
       selectBtn: "அறிக்கையைத் தேர்ந்தெடுக்கவும்", tools: "கருவிகள்", accessibilityTitle: "அணுகல்தன்மை கட்டுப்பாடுகள்",
@@ -133,11 +150,11 @@ const App: React.FC = () => {
       </button>
       <div className="flex items-center justify-between p-4 rounded-2xl border" style={{ borderColor: themeColors.border }}>
         <span className="font-bold">Dyslexic Font</span>
-        <input type="checkbox" className="w-5 h-5 accent-blue-600" checked={accessibility.dyslexic} onChange={() => setAccessibility(prev => ({...prev, dyslexic: !prev.dyslexic}))} />
+        <input type="checkbox" className="w-5 h-5 accent-blue-600" checked={accessibility.dyslexic} onChange={() => setAccessibility(prev => ({ ...prev, dyslexic: !prev.dyslexic }))} />
       </div>
       <div className="flex items-center justify-between p-4 rounded-2xl border" style={{ borderColor: themeColors.border }}>
         <span className="font-bold">High Contrast Mode</span>
-        <input type="checkbox" className="w-5 h-5 accent-blue-600" checked={accessibility.highContrast} onChange={() => setAccessibility(prev => ({...prev, highContrast: !prev.highContrast}))} />
+        <input type="checkbox" className="w-5 h-5 accent-blue-600" checked={accessibility.highContrast} onChange={() => setAccessibility(prev => ({ ...prev, highContrast: !prev.highContrast }))} />
       </div>
     </div>
   );
@@ -219,6 +236,18 @@ const App: React.FC = () => {
 
         {currentTab === 'analyze' && (
           <div className="space-y-6 animate-fade-in">
+            {/* 3D MODEL VIEWER */}
+            <div className="w-full h-[450px] relative mt-4 mb-4">
+              <Canvas camera={{ position: [0, 0, 5], fov: 50 }}>
+                <Suspense fallback={null}>
+                  <Stage environment="city" intensity={0.6} adjustCamera={1.2}>
+                    <AnatomyModel />
+                  </Stage>
+                </Suspense>
+                <OrbitControls enableZoom={false} />
+              </Canvas>
+            </div>
+
             {/* INPUT MODE TOGGLE */}
             <div className="flex gap-4 border-b dark:border-slate-700 pb-2">
               <button onClick={() => setInputMode('pdf')} className={`flex items-center gap-2 pb-2 px-2 transition-all font-bold ${inputMode === 'pdf' ? 'border-b-4 border-blue-500 text-blue-500' : 'opacity-40'}`}>
@@ -243,14 +272,14 @@ const App: React.FC = () => {
               ) : (
                 <div className="text-left space-y-4">
                   <h2 className="text-2xl font-black text-center mb-4">{t[language].typeSymptoms}</h2>
-                  <textarea 
+                  <textarea
                     style={{ backgroundColor: isDark ? '#0f172a' : '#f1f5f9', borderColor: themeColors.border }}
                     className="w-full h-32 p-4 rounded-2xl border outline-none resize-none"
                     placeholder={t[language].typePlaceholder}
                     value={symptomText}
                     onChange={(e) => setSymptomText(e.target.value)}
                   />
-                  <button 
+                  <button
                     disabled={!symptomText.trim()}
                     onClick={runAnalysis}
                     className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 disabled:opacity-30 transition-all"
