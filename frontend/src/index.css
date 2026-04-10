@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+/* 1. Use @utility for your custom classes (V4 Syntax) */
+@utility smooth-transition {
+  @apply transition-all duration-300;
+}
+
+@utility focus-ring {
+  outline: none;
+  @apply ring-2 ring-blue-500 ring-offset-2;
+}
+
+@utility input-field {
+  @apply px-4 py-3 rounded-lg border border-gray-300 bg-white outline-none transition;
+  @apply dark:border-slate-600 dark:bg-slate-700 dark:text-white;
+}
+
+@utility button-primary {
+  @apply px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold rounded-lg transition-all transform;
+}
+
+@utility button-secondary {
+  @apply px-6 py-3 border border-gray-300 text-gray-700 bg-white font-semibold rounded-lg transition-colors;
+  @apply dark:border-slate-600 dark:text-gray-300 dark:bg-slate-800;
+}
+
+@utility card {
+  @apply rounded-xl border bg-white border-gray-200 p-6 shadow-md;
+  @apply dark:bg-slate-800 dark:border-slate-700;
+}
+
+/* 2. Standard CSS for Accessibility Modes */
+/* We use standard CSS selectors here because V4 handles them better than @apply with !important */
+
+html.dyslexic-font {
+  font-family: 'OpenDyslexic', 'Comic Sans MS', sans-serif !important;
+}
+
+/* High Contrast Logic */
+html.high-contrast {
+  --bg-color: white;
+  --text-color: black;
+  --border-color: black;
+}
+
+html.dark.high-contrast {
+  --bg-color: black;
+  --text-color: white;
+  --border-color: white;
+}
+
+html.high-contrast body, 
+html.high-contrast .card, 
+html.high-contrast .input-field {
+  background-color: var(--bg-color) !important;
+  color: var(--text-color) !important;
+  border: 2px solid var(--border-color) !important;
+}
+
+html.high-contrast * {
+  color: var(--text-color) !important;
+  box-shadow: none !important;
+}
+
+/* Color Blindness Filter */
+html.color-blind {
+  filter: url(#deuteranopia);
+}
+
+/* 3. Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
