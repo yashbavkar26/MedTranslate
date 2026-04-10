@@ -309,8 +309,25 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`[MedTranslate] Backend running at http://localhost:${PORT}`);
-  console.log(`[MedTranslate] Ollama host: ${OLLAMA_HOST}`);
-  console.log(`[MedTranslate] Ollama model: ${OLLAMA_MODEL}`);
-});
+function startServer() {
+  server.listen(PORT, () => {
+    console.log(`[MedTranslate] Backend running at http://localhost:${PORT}`);
+    console.log(`[MedTranslate] Ollama host: ${OLLAMA_HOST}`);
+    console.log(`[MedTranslate] Ollama model: ${OLLAMA_MODEL}`);
+  });
+}
+
+const isDirectRun =
+  process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href;
+
+if (isDirectRun) {
+  startServer();
+}
+
+export {
+  buildAnalyzeResponse,
+  buildMedicalPrompt,
+  detectLanguage,
+  server,
+  startServer
+};
