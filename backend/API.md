@@ -80,3 +80,47 @@ Instructs the Ollama model to analyze medical text or report findings. Returns s
   }
 }
 ```
+
+---
+
+## 3. Upload Blood Test Report (PDF)
+`POST /api/upload-report`
+
+Uploads a PDF report, extracts text, summarizes it out loud using the standard `analyze` schema, and initializes a chat session so the user can ask follow-up questions.
+
+### Request
+Multipart form data (`multipart/form-data`):
+- `report` (or `file`): The PDF file to upload.
+
+### Response (200 OK)
+```json
+{
+  "sessionId": "1e149405-b1a3-4886-b4dc-ab27c6224ce3",
+  "model": "meditron",
+  "result": {
+    "explanation": "Summarized report findings...",
+    "urgency": "soon",
+    // standard analysis fields...
+  },
+  "response": "Formatted plain text...",
+  "raw": {}
+}
+```
+
+---
+
+## 4. Report Question & Answer (Chat)
+`POST /api/chat`
+
+Asks a follow-up question regarding a previously uploaded report. It maintains session context and incorporates the original report alongside chat history. Returns the standard analysis schema.
+
+### Request
+```json
+{
+  "sessionId": "1e149405-b1a3-4886-b4dc-ab27c6224ce3",
+  "text": "What does a high monocyte count mean here?"
+}
+```
+
+### Response (200 OK)
+Same schema as `/api/analyze` and `/api/upload-report`.
