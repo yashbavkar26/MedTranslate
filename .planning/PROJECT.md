@@ -15,13 +15,13 @@ Users can turn medical report data, voice concerns, or symptom text into clear E
 ### Validated
 
 - [x] The system runs inference through a local Ollama medical model on the developer laptop. (Validated in Phase 1: Backend Safety Foundation)
+- [x] User can upload a blood test report and receive a plain-language explanation in the input language. (Validated in Phase 2: Report Understanding)
+- [x] User can ask questions about an uploaded report and receive answers grounded in the report content. (Validated in Phase 2: Report Understanding)
 
 ### Active
 
-- [ ] User can upload a blood test report and receive a plain-language explanation in the input language.
 - [ ] User can speak a health concern by voice and receive a plain-language response in the input language.
 - [ ] User can type how they are feeling and receive a plain-language response in the input language.
-- [ ] User can ask questions about an uploaded report and receive answers grounded in the report content.
 - [ ] User can see whether a result or concern may need immediate doctor attention, routine follow-up, or basic self-care.
 - [ ] User can use the product in English and Hindi.
 - [ ] The product is available through both a desktop web interface and a Flutter mobile app.
