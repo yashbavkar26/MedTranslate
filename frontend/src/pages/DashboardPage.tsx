@@ -14,7 +14,41 @@ export function DashboardPage() {
   const [input, setInput] = useState('');
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [medHistory, setMedHistory] = useLocalStorage<AnalysisResult[]>('medHistory', []);
+  const [isDragActive, setIsDragActive] = useState(false);
   const isDark = document.documentElement.classList.contains('dark');
+
+  const handleFileUpload = (file: File) => {
+    if (file.type === 'application/pdf') {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = `PDF Content: ${file.name}\n\nFile size: ${(file.size / 1024).toFixed(2)}KB\n\n[PDF content would be extracted here]\n\nPlease describe your symptoms based on the report or the system will analyze it when backend is connected.`;
+        setInput(text);
+      };
+      reader.readAsText(file);
+    } else {
+      alert('Please upload a PDF file');
+    }
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setIsDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setIsDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+    const files = e.dataTransfer.files;
+    if (files && files[0]) {
+      handleFileUpload(files[0]);
+    }
+  };
 
   const handleAnalyze = () => {
     if (!input.trim()) return;
@@ -94,12 +128,29 @@ export function DashboardPage() {
             <h3 className="text-lg font-semibold mb-4">{t.dashboard.newAnalysis}</h3>
 
             {/* File Upload Area */}
-            <div className={`border-2 border-dashed rounded-lg p-8 text-center mb-6 transition-colors ${
-              isDark ? 'border-slate-600 hover:border-slate-500' : 'border-gray-300 hover:border-gray-400'
-            }`}>
-              <Upload className="w-12 h-12 mx-auto mb-3 text-blue-500" />
-              <p className="font-semibold mb-2">{t.dashboard.uploadPdf}</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Or drag and drop PDF files</p>
+            <div
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+              className={`border-2 border-dashed rounded-lg p-8 text-center mb-6 transition-colors cursor-pointer ${
+                isDragActive
+                  ? isDark ? 'border-blue-400 bg-slate-700' : 'border-blue-400 bg-blue-50'
+                  : isDark ? 'border-slate-600 hover:border-slate-500' : 'border-gray-300 hover:border-gray-400'
+              }`}
+            >
+              <input
+                type="file"
+                id="pdf-input"
+                accept=".pdf"
+                onChange={(e) => e.target.files && handleFileUpload(e.target.files[0])}
+                className="hidden"
+              />
+              <label htmlFor="pdf-input" className="cursor-pointer block">
+                <Upload className="w-12 h-12 mx-auto mb-3 text-blue-500" />
+                <p className="font-semibold mb-2">{t.dashboard.uploadPdf}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Or drag and drop PDF files</p>
+              </label>
             </div>
 
             {/* Text Input */}

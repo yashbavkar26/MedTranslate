@@ -83,69 +83,79 @@ html.dyslexic-font {
 
 /* Light Mode High Contrast */
 html.high-contrast:not(.dark) {
-  @apply bg-white text-black;
+  @apply bg-white text-black !important;
   color-scheme: light;
 }
 
+html.high-contrast:not(.dark),
 html.high-contrast:not(.dark) body {
-  @apply bg-white text-black;
+  @apply bg-white !important;
+}
+
+html.high-contrast:not(.dark) * {
+  @apply text-black !important;
 }
 
 html.high-contrast:not(.dark) button,
 html.high-contrast:not(.dark) input,
 html.high-contrast:not(.dark) textarea,
-html.high-contrast:not(.dark) select,
-html.high-contrast:not(.dark) a {
-  @apply border-2 border-black text-black;
+html.high-contrast:not(.dark) select {
+  @apply border-2 !important border-black !important text-black !important bg-white !important;
 }
 
 html.high-contrast:not(.dark) .card,
-html.high-contrast:not(.dark) .card-dark {
-  @apply bg-white border-2 border-black text-black;
+html.high-contrast:not(.dark) .card-dark,
+html.high-contrast:not(.dark) div[class*="rounded"] {
+  @apply bg-white !important border-2 !important border-black !important text-black !important;
 }
 
 html.high-contrast:not(.dark) .input-field {
-  @apply bg-white text-black border-2 border-black;
+  @apply bg-white !important text-black !important border-2 !important border-black !important;
 }
 
 html.high-contrast:not(.dark) .button-primary {
-  @apply border-2 border-black text-black bg-white;
+  @apply border-2 !important border-black !important text-black !important bg-white !important;
 }
 
 html.high-contrast:not(.dark) .button-secondary {
-  @apply border-2 border-black text-black bg-white;
+  @apply border-2 !important border-black !important text-black !important bg-white !important;
 }
 
 /* Dark Mode High Contrast */
 html.dark.high-contrast {
-  @apply bg-black text-white;
+  @apply bg-black text-white !important;
   color-scheme: dark;
 }
 
+html.dark.high-contrast,
 html.dark.high-contrast body {
-  @apply bg-black text-white;
+  @apply bg-black !important;
+}
+
+html.dark.high-contrast * {
+  @apply text-white !important;
 }
 
 html.dark.high-contrast button,
 html.dark.high-contrast input,
 html.dark.high-contrast textarea,
-html.dark.high-contrast select,
-html.dark.high-contrast a {
-  @apply border-2 border-white;
+html.dark.high-contrast select {
+  @apply border-2 !important border-white !important text-white !important bg-black !important;
 }
 
 html.dark.high-contrast .card,
-html.dark.high-contrast .card-dark {
-  @apply bg-black border-2 border-white text-white;
+html.dark.high-contrast .card-dark,
+html.dark.high-contrast div[class*="rounded"] {
+  @apply bg-black !important border-2 !important border-white !important text-white !important;
 }
 
 html.dark.high-contrast .input-field {
-  @apply bg-black text-white border-2 border-white;
+  @apply bg-black !important text-white !important border-2 !important border-white !important;
 }
 
 html.dark.high-contrast .button-primary,
 html.dark.high-contrast .button-secondary {
-  @apply border-2 border-white;
+  @apply border-2 !important border-white !important text-white !important bg-black !important;
 }
 
 html.color-blind {
