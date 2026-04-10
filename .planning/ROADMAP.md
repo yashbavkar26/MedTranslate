@@ -56,6 +56,11 @@ MedTranslate will be built as a shared backend with two thin clients: a desktop 
 
 **Requirements:** INPT-02, INPT-03, INPT-04, INPT-05, GUID-01, GUID-02, GUID-03, GUID-04, ACCS-01
 
+**Plans:** 1 plan
+
+Plans:
+- [ ] 03-01-analyze-contract-normalization-PLAN.md — Harden `/api/analyze` response normalization, urgency/self-care safety gates, health contract, and confirmed transcript API documentation.
+
 **Success Criteria:**
 1. User can submit typed symptoms or health concerns in English or Hindi.
 2. User can speak a concern, review the transcript, and confirm it before analysis.
