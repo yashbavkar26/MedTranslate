@@ -60,9 +60,10 @@ export function analyzeText(
 }
 
 /** Upload a PDF lab report for summarisation. Returns a sessionId for chat. */
-export function uploadReport(file: File): Promise<UploadResponse> {
+export function uploadReport(file: File, language?: string): Promise<UploadResponse> {
   const form = new FormData();
   form.append('report', file);
+  if (language) form.append('language', language);
 
   return request<UploadResponse>('/api/upload-report', {
     method: 'POST',
@@ -79,5 +80,17 @@ export function chatFollowUp(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId, text }),
+  });
+}
+
+/** Dynamically re-translate an existing medical result. */
+export function translateResult(
+  result: Record<string, any>,
+  language: string,
+): Promise<{ result: Record<string, any> }> {
+  return request<{ result: Record<string, any> }>('/api/translate-result', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ result, language }),
   });
 }

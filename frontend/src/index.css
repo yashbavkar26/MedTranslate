@@ -7,7 +7,7 @@
 
 @utility focus-ring {
   outline: none;
-  @apply ring-2 ring-blue-500 ring-offset-2;
+  @apply ring-2 ring-cyan-400 ring-offset-2;
 }
 
 @utility input-field {
@@ -16,7 +16,7 @@
 }
 
 @utility button-primary {
-  @apply px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold rounded-lg transition-all transform;
+  @apply px-6 py-3 bg-gradient-to-r from-cyan-400 to-blue-600 shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/60 transition-all hover:scale-105 text-white font-semibold rounded-lg transition-all transform;
 }
 
 @utility button-secondary {

@@ -11,6 +11,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@vitalets/google-translate-api": "^9.2.1",
     "formidable": "^3.5.4",
     "pdf-parse": "^1.1.1"
   }
