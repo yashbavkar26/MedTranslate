@@ -61,9 +61,11 @@ function buildMedicalPrompt(text, language = "English") {
   "doctorVisitGuidance": "when and why to see a doctor",
   "homeRemedies": [
     { "remedy": "name of remedy", "instruction": "how to use it safely" }
-  ]
+  ],
+  "affectedBodyParts": ["organ1", "organ2"]
 }`,
     "homeRemedies should include safe, well-known remedies for temporary relief. For urgent symptoms, frame them as temporary comfort measures while the patient seeks immediate care.",
+    "affectedBodyParts must be an array of body parts that are likely affected by the symptoms or findings. ONLY use values from this list: brain, eyes, lungs, heart, liver, stomach, kidneys, intestines, bones, blood, thyroid, spleen, pancreas, bladder. Pick all that are relevant based on the symptoms described.",
     `Patient text: """${text}"""`
   ].join("\n");
 }

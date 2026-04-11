@@ -1,9 +1,10 @@
 import React, { useState, useEffect, ChangeEvent, useRef, Suspense } from 'react';
-import { Upload, History, Settings, AlertTriangle, Shield, Send, Clock, CheckCircle, Moon, Sun, Type, ChevronRight, Lock, X, FileText, MessageSquare } from 'lucide-react';
+import { Upload, History, Settings, AlertTriangle, Shield, Send, Clock, CheckCircle, Moon, Sun, ChevronRight, Lock, X, FileText, MessageSquare, Wifi, WifiOff, Leaf, Stethoscope, HelpCircle } from 'lucide-react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { useGLTF, Stage, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import BodyMap, { detectAffectedOrgans, OrganId } from './BodyMap';
+import { checkHealth, analyzeText, uploadReport, chatFollowUp } from './api';
 
 function AnatomyModel() {
   const { scene } = useGLTF('/front_body_anatomy.glb');
@@ -22,10 +23,51 @@ useGLTF.preload('/front_body_anatomy.glb');
 // --- TYPES & INTERFACES ---
 interface MedicalResult {
   date: string;
-  summary: string;
-  advice: string;
-  triage: 'Red' | 'Yellow' | 'Green';
+  explanation: string;
+  urgency: 'urgent' | 'soon' | 'self_care';
+  uncertainty: string;
+  safeNextSteps: string[];
+  warningSigns: string[];
+  doctorVisitGuidance: string;
+  homeRemedies?: { remedy: string; instruction: string }[];
   affectedOrgans: OrganId[];
+  sessionId?: string;
+  safetyNotice?: string;
+}
+
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+function urgencyToTriage(urgency: string): 'Red' | 'Yellow' | 'Green' {
+  if (urgency === 'urgent') return 'Red';
+  if (urgency === 'soon') return 'Yellow';
+  return 'Green';
+}
+
+function triageColor(triage: 'Red' | 'Yellow' | 'Green'): string {
+  if (triage === 'Red') return '#ef4444';
+  if (triage === 'Yellow') return '#eab308';
+  return '#22c55e';
+}
+
+function tryParseJson(raw: string): Record<string, any> | null {
+  if (!raw || !raw.trim()) return null;
+  // 1. Try direct parse
+  try { return JSON.parse(raw); } catch { /* continue */ }
+  // 2. Strip markdown code fences (```json ... ``` or ``` ... ```)
+  const fenceMatch = raw.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+  if (fenceMatch) {
+    try { return JSON.parse(fenceMatch[1].trim()); } catch { /* continue */ }
+  }
+  // 3. Extract first { ... } block
+  const braceStart = raw.indexOf('{');
+  const braceEnd = raw.lastIndexOf('}');
+  if (braceStart !== -1 && braceEnd > braceStart) {
+    try { return JSON.parse(raw.slice(braceStart, braceEnd + 1)); } catch { /* continue */ }
+  }
+  return null;
 }
 
 interface AccessibilitySettings {
@@ -46,10 +88,27 @@ const App: React.FC = () => {
   const [language, setLanguage] = useState<Language>('English');
   const [accessibility, setAccessibility] = useState<AccessibilitySettings>({ dyslexic: false, highContrast: false });
   const [isDark, setIsDark] = useState<boolean>(true);
-  const [history, setHistory] = useState<MedicalResult[]>([]);
+  const [history, setHistory] = useState<MedicalResult[]>(() => {
+    try {
+      const saved = localStorage.getItem('medTranslateHistory');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('medTranslateHistory', JSON.stringify(history));
+  }, [history]);
+
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [result, setResult] = useState<MedicalResult | null>(null);
   const [symptomText, setSymptomText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isChatting, setIsChatting] = useState(false);
 
   // --- TRANSLATIONS (Updated with Input Mode Strings) ---
   const t: Record<Language, any> = {
@@ -111,32 +170,98 @@ const App: React.FC = () => {
     if (accessibility.dyslexic) root.classList.add('dyslexic-font'); else root.classList.remove('dyslexic-font');
   }, [isDark, accessibility]);
 
-  const runAnalysis = () => {
+  // --- HEALTH CHECK ON MOUNT ---
+  useEffect(() => {
+    checkHealth()
+      .then((h) => setBackendOnline(h.ok && h.ollamaReachable))
+      .catch(() => setBackendOnline(false));
+  }, []);
+
+  // --- HELPERS ---
+  const VALID_ORGANS: OrganId[] = ['brain', 'eyes', 'lungs', 'heart', 'liver', 'stomach', 'kidneys', 'intestines', 'bones', 'blood', 'thyroid', 'spleen', 'pancreas', 'bladder'];
+
+  function buildResult(parsed: Record<string, any>, sourceText: string, sessionId?: string, safetyNotice?: string): MedicalResult {
+    // Use LLM-provided body parts, filtering to valid organ IDs; fall back to keyword detection
+    let organs: OrganId[] = [];
+    if (Array.isArray(parsed.affectedBodyParts) && parsed.affectedBodyParts.length > 0) {
+      organs = parsed.affectedBodyParts.filter((p: string) => VALID_ORGANS.includes(p as OrganId)) as OrganId[];
+    }
+    if (organs.length === 0) {
+      organs = detectAffectedOrgans(sourceText + ' ' + (parsed.explanation || ''));
+    }
+
+    return {
+      date: new Date().toLocaleDateString(),
+      explanation: parsed.explanation || 'No explanation returned.',
+      urgency: (['urgent', 'soon', 'self_care'].includes(parsed.urgency) ? parsed.urgency : 'soon') as MedicalResult['urgency'],
+      uncertainty: parsed.uncertainty || '',
+      safeNextSteps: Array.isArray(parsed.safeNextSteps) ? parsed.safeNextSteps : [],
+      warningSigns: Array.isArray(parsed.warningSigns) ? parsed.warningSigns : [],
+      doctorVisitGuidance: parsed.doctorVisitGuidance || '',
+      homeRemedies: Array.isArray(parsed.homeRemedies) ? parsed.homeRemedies : undefined,
+      affectedOrgans: organs,
+      sessionId,
+      safetyNotice,
+    };
+  }
+
+  // --- ANALYZE (text mode) ---
+  const runAnalysis = async () => {
+    if (!symptomText.trim()) return;
     setIsAnalyzing(true);
-    setTimeout(() => {
-      // Use the symptom text if in text mode, otherwise use mock PDF report text
-      const reportText = inputMode === 'text' && symptomText.trim()
-        ? symptomText
-        : 'Your hemoglobin is 10.2 g/dL. This is slightly low (anemia). Liver function tests show elevated ALT. Blood sugar levels indicate pre-diabetes. Kidney function (creatinine) is borderline.';
-
-      const detectedOrgans = detectAffectedOrgans(reportText);
-
-      const mockResult: MedicalResult = {
-        date: new Date().toLocaleDateString(),
-        summary: "summary",
-        advice: "advice",
-        triage: "Yellow",
-        affectedOrgans: detectedOrgans
-      };
-      setResult(mockResult);
-      setHistory(prev => [mockResult, ...prev]);
+    setError(null);
+    setChatMessages([]);
+    try {
+      const data = await analyzeText(symptomText);
+      const parsed = tryParseJson(data.response);
+      if (!parsed) throw new Error('Invalid response from the AI model. Please try again.');
+      const r = buildResult(parsed, symptomText, undefined, data.safetyNotice);
+      setResult(r);
+      setHistory(prev => [r, ...prev]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Analysis failed. Is the backend running?');
+    } finally {
       setIsAnalyzing(false);
-    }, 2000);
+    }
   };
 
-  const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files) return;
-    runAnalysis();
+  // --- UPLOAD PDF ---
+  const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.[0]) return;
+    setIsAnalyzing(true);
+    setError(null);
+    setChatMessages([]);
+    try {
+      const data = await uploadReport(e.target.files[0]);
+      const parsed = tryParseJson(data.response);
+      if (!parsed) throw new Error('Invalid response from the AI model. Please try again.');
+      const r = buildResult(parsed, data.response, data.sessionId, data.safetyNotice);
+      setResult(r);
+      setHistory(prev => [r, ...prev]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed. Is the backend running?');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // --- CHAT FOLLOW-UP ---
+  const sendChatMessage = async () => {
+    if (!chatInput.trim() || !result?.sessionId) return;
+    const userMsg = chatInput.trim();
+    setChatInput('');
+    setChatMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setIsChatting(true);
+    try {
+      const data = await chatFollowUp(result.sessionId, userMsg);
+      const parsed = tryParseJson(data.response);
+      const reply = parsed?.explanation || data.response || 'No response.';
+      setChatMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+    } catch (err) {
+      setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err instanceof Error ? err.message : 'Chat failed.'}` }]);
+    } finally {
+      setIsChatting(false);
+    }
   };
 
   const themeColors = {
@@ -229,9 +354,17 @@ const App: React.FC = () => {
           <Shield className="text-blue-500" />
           <h1 className="text-xl font-bold tracking-tight">{t[language].welcome}</h1>
         </div>
-        <button onClick={() => setShowSettingsModal(true)} className="p-2 rounded-lg border hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors" style={{ borderColor: themeColors.border }}>
-          <Settings size={20} />
-        </button>
+        <div className="flex items-center gap-3">
+          {backendOnline !== null && (
+            <span className="flex items-center gap-1.5 text-xs font-bold" title={backendOnline ? 'Backend connected' : 'Backend offline'}>
+              {backendOnline ? <Wifi size={14} className="text-emerald-500" /> : <WifiOff size={14} className="text-red-500" />}
+              {backendOnline ? 'Online' : 'Offline'}
+            </span>
+          )}
+          <button onClick={() => setShowSettingsModal(true)} className="p-2 rounded-lg border hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors" style={{ borderColor: themeColors.border }}>
+            <Settings size={20} />
+          </button>
+        </div>
       </nav>
 
       <main className="max-w-4xl mx-auto p-6">
@@ -300,25 +433,151 @@ const App: React.FC = () => {
               )}
             </div>
 
-            {isAnalyzing && <p className="text-center animate-pulse text-blue-500 font-bold uppercase tracking-widest text-xs">Analyzing with RAG Pipeline...</p>}
+            {isAnalyzing && <p className="text-center animate-pulse text-blue-500 font-bold uppercase tracking-widest text-xs">Analyzing with AI Model...</p>}
+
+            {error && !isAnalyzing && (
+              <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm font-bold flex items-center gap-3">
+                <AlertTriangle size={18} /> {error}
+              </div>
+            )}
 
             {result && !isAnalyzing && (
               <>
-                <div style={{ backgroundColor: themeColors.card }} className={`rounded-3xl border-l-[16px] p-8 shadow-xl animate-slide-in ${result.triage === 'Yellow' ? 'border-yellow-500' : 'border-red-500'}`}>
-                  <h3 className="text-sm font-black uppercase tracking-widest flex items-center gap-2 mb-4 opacity-50">
-                    <AlertTriangle size={18} className={result.triage === 'Yellow' ? 'text-yellow-500' : 'text-red-500'} /> {t[language].triage}
-                  </h3>
-                  <p className="text-2xl font-bold leading-snug mb-8">"{t[language].summary}"</p>
-                  <div style={{ backgroundColor: isDark ? '#0f172a' : '#f1f5f9', borderColor: themeColors.border }} className="p-6 rounded-2xl border">
-                    <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">{t[language].next}:</p>
-                    <p className="text-sm opacity-80">{t[language].advice}</p>
+                {/* Safety Notice */}
+                {result.safetyNotice && (
+                  <div style={{ backgroundColor: isDark ? '#1e293b' : '#eff6ff', borderColor: '#3b82f6' }} className="p-4 rounded-2xl border text-sm opacity-80 flex items-center gap-3">
+                    <Shield size={16} className="text-blue-500 flex-shrink-0" /> {result.safetyNotice}
                   </div>
+                )}
+
+                {/* Main Result Card */}
+                <div style={{ backgroundColor: themeColors.card, borderLeftColor: triageColor(urgencyToTriage(result.urgency)) }} className="rounded-3xl border-l-[16px] p-8 shadow-xl animate-slide-in">
+                  <h3 className="text-sm font-black uppercase tracking-widest flex items-center gap-2 mb-4 opacity-50">
+                    <AlertTriangle size={18} style={{ color: triageColor(urgencyToTriage(result.urgency)) }} /> {t[language].triage}: {urgencyToTriage(result.urgency)}
+                  </h3>
+                  <p className="text-xl font-bold leading-snug mb-6">{result.explanation}</p>
+
+                  {/* Uncertainty */}
+                  {result.uncertainty && (
+                    <div className="flex items-start gap-2 mb-6 text-sm opacity-70 italic">
+                      <HelpCircle size={16} className="flex-shrink-0 mt-0.5 text-yellow-500" />
+                      {result.uncertainty}
+                    </div>
+                  )}
+
+                  {/* Safe Next Steps */}
+                  {result.safeNextSteps.length > 0 && (
+                    <div style={{ backgroundColor: isDark ? '#0f172a' : '#f1f5f9', borderColor: themeColors.border }} className="p-5 rounded-2xl border mb-4">
+                      <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-3">{t[language].next}:</p>
+                      <ul className="space-y-2">
+                        {result.safeNextSteps.map((step, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm">
+                            <CheckCircle size={14} className="text-emerald-500 mt-0.5 flex-shrink-0" /> {step}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Warning Signs */}
+                  {result.warningSigns.length > 0 && (
+                    <div className="p-5 rounded-2xl border border-red-500/20 bg-red-500/5 mb-4">
+                      <p className="text-xs font-black text-red-500 uppercase tracking-widest mb-3">⚠ Warning Signs:</p>
+                      <ul className="space-y-2">
+                        {result.warningSigns.map((sign, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm">
+                            <AlertTriangle size={14} className="text-red-500 mt-0.5 flex-shrink-0" /> {sign}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Doctor Visit Guidance */}
+                  {result.doctorVisitGuidance && (
+                    <div className="p-5 rounded-2xl border border-blue-500/20 bg-blue-500/5">
+                      <p className="text-xs font-black text-blue-500 uppercase tracking-widest mb-2 flex items-center gap-2">
+                        <Stethoscope size={14} /> Doctor Visit Guidance:
+                      </p>
+                      <p className="text-sm">{result.doctorVisitGuidance}</p>
+                    </div>
+                  )}
                 </div>
+
+                {/* Home Remedies */}
+                {result.homeRemedies && result.homeRemedies.length > 0 && (
+                  <div style={{ backgroundColor: themeColors.card, borderColor: themeColors.border }} className="rounded-3xl border p-8 shadow-xl animate-slide-in">
+                    <h3 className="text-sm font-black uppercase tracking-widest flex items-center gap-2 mb-5 opacity-60">
+                      <Leaf size={16} className="text-emerald-500" /> Home Remedies
+                    </h3>
+                    <div className="grid gap-3">
+                      {result.homeRemedies.map((rem, i) => (
+                        <div key={i} style={{ backgroundColor: isDark ? '#0f172a' : '#f1f5f9', borderColor: themeColors.border }} className="p-4 rounded-2xl border">
+                          <p className="font-bold text-sm text-emerald-500 mb-1">{rem.remedy}</p>
+                          <p className="text-xs opacity-70">{rem.instruction}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* 2D BODY MAP — shows affected organs */}
                 {result.affectedOrgans.length > 0 && (
                   <div style={{ backgroundColor: themeColors.card, borderColor: themeColors.border }} className="rounded-3xl border p-8 shadow-xl animate-slide-in">
                     <BodyMap affectedOrgans={result.affectedOrgans} isDark={isDark} />
+                  </div>
+                )}
+
+                {/* CHAT FOLLOW-UP — only for PDF uploads with sessionId */}
+                {result.sessionId && (
+                  <div style={{ backgroundColor: themeColors.card, borderColor: themeColors.border }} className="rounded-3xl border p-8 shadow-xl animate-slide-in">
+                    <h3 className="text-sm font-black uppercase tracking-widest flex items-center gap-2 mb-5 opacity-60">
+                      <MessageSquare size={16} className="text-blue-500" /> Ask Follow-up Questions
+                    </h3>
+
+                    {/* Chat messages */}
+                    {chatMessages.length > 0 && (
+                      <div className="space-y-3 mb-5 max-h-80 overflow-y-auto">
+                        {chatMessages.map((msg, i) => (
+                          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                            <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${
+                              msg.role === 'user'
+                                ? 'bg-blue-600 text-white'
+                                : isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-800'
+                            }`}>
+                              {msg.content}
+                            </div>
+                          </div>
+                        ))}
+                        {isChatting && (
+                          <div className="flex justify-start">
+                            <div className={`p-3 rounded-2xl text-sm animate-pulse ${isDark ? 'bg-slate-700 text-blue-400' : 'bg-slate-100 text-blue-600'}`}>
+                              Thinking...
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Chat input */}
+                    <div className="flex gap-3">
+                      <input
+                        type="text"
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && sendChatMessage()}
+                        placeholder="Ask about your report..."
+                        style={{ backgroundColor: isDark ? '#0f172a' : '#f1f5f9', borderColor: themeColors.border }}
+                        className="flex-1 p-3 rounded-2xl border outline-none text-sm"
+                      />
+                      <button
+                        onClick={sendChatMessage}
+                        disabled={!chatInput.trim() || isChatting}
+                        className="px-5 py-3 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 disabled:opacity-30 transition-all flex items-center gap-2"
+                      >
+                        <Send size={16} />
+                      </button>
+                    </div>
                   </div>
                 )}
               </>
@@ -333,9 +592,15 @@ const App: React.FC = () => {
               <div key={idx} style={{ backgroundColor: themeColors.card, borderColor: themeColors.border }} className="p-6 rounded-2xl border flex items-center justify-between">
                 <div className="flex items-center gap-5">
                   <Clock size={20} className="text-slate-400" />
-                  <div><p className="font-black">{item.date}</p><p className="text-xs opacity-50">{t[language].summary}</p></div>
+                  <div>
+                    <p className="font-black">{item.date}</p>
+                    <p className="text-xs opacity-50 line-clamp-1 max-w-xs">{item.explanation}</p>
+                  </div>
                 </div>
-                <CheckCircle size={22} className="text-emerald-500" />
+                <span className="text-xs font-black px-3 py-1 rounded-full" style={{
+                  backgroundColor: triageColor(urgencyToTriage(item.urgency)) + '22',
+                  color: triageColor(urgencyToTriage(item.urgency)),
+                }}>{urgencyToTriage(item.urgency)}</span>
               </div>
             ))}
           </div>

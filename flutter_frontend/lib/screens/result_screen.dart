@@ -1,10 +1,23 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:percent_indicator/percent_indicator.dart';
 import '../theme/app_theme.dart';
+import '../services/voice_service.dart';
+import 'chat_screen.dart';
 
 class ResultScreen extends StatefulWidget {
-  const ResultScreen({super.key});
+  final String aiResponse;
+  final String? safetyNotice;
+  final String? model;
+  final String? sessionId;
+
+  const ResultScreen({
+    super.key,
+    required this.aiResponse,
+    this.safetyNotice,
+    this.model,
+    this.sessionId,
+  });
 
   @override
   State<ResultScreen> createState() => _ResultScreenState();
@@ -16,61 +29,18 @@ class _ResultScreenState extends State<ResultScreen>
   late AnimationController _slideCtrl;
   late Animation<double> _fade;
   late Animation<Offset> _slide;
-  int _expandedIndex = 0;
 
-  static const _findings = [
-    {
-      'name': 'Hemoglobin (Hb)',
-      'value': '10.5 g/dL',
-      'normalRange': '12.0 – 16.0 g/dL',
-      'status': 'low',
-      'percent': 0.66,
-      'explanation':
-          'Your hemoglobin is slightly below the normal range. This may indicate mild anemia, often related to iron deficiency.',
-      'recommendation':
-          'Consider increasing iron-rich foods like spinach, lentils, and red meat. Follow up with your doctor.',
-      'icon': Icons.water_drop_rounded,
-      'color': Color(0xFFFF6B6B),
-    },
-    {
-      'name': 'WBC Count',
-      'value': '11.2 K/μL',
-      'normalRange': '4.0 – 11.0 K/μL',
-      'status': 'high',
-      'percent': 0.88,
-      'explanation':
-          'White blood cells are slightly elevated. This can indicate a minor infection or inflammation your body is fighting.',
-      'recommendation':
-          'Monitor for signs of infection (fever, fatigue). Consult a doctor if elevated for more than 2 weeks.',
-      'icon': Icons.bubble_chart_rounded,
-      'color': Color(0xFFFF9F43),
-    },
-    {
-      'name': 'Blood Glucose',
-      'value': '95 mg/dL',
-      'normalRange': '70 – 100 mg/dL',
-      'status': 'normal',
-      'percent': 0.82,
-      'explanation':
-          'Your fasting blood glucose is within the normal range — no signs of diabetes or hypoglycemia.',
-      'recommendation':
-          'Maintain a balanced diet and regular exercise to keep glucose levels stable.',
-      'icon': Icons.science_rounded,
-      'color': Color(0xFF00C6AE),
-    },
-    {
-      'name': 'Platelets',
-      'value': '245 K/μL',
-      'normalRange': '150 – 400 K/μL',
-      'status': 'normal',
-      'percent': 0.65,
-      'explanation':
-          'Your platelet count is within normal limits. Blood clotting function appears healthy.',
-      'recommendation': 'No action needed. Continue routine checkups annually.',
-      'icon': Icons.grain_rounded,
-      'color': Color(0xFF6C63FF),
-    },
-  ];
+  // Parsed result fields
+  String _explanation = '';
+  String _urgency = '';
+  String _uncertainty = '';
+  List<String> _safeNextSteps = [];
+  List<String> _warningSigns = [];
+  String _doctorVisitGuidance = '';
+  List<Map<String, String>> _homeRemedies = [];
+  bool _isParsed = false;
+  bool _isSpeaking = false;
+  final _voice = VoiceService.instance;
 
   @override
   void initState() {
@@ -84,38 +54,92 @@ class _ResultScreenState extends State<ResultScreen>
         .animate(CurvedAnimation(parent: _slideCtrl, curve: Curves.easeOut));
     _fadeCtrl.forward();
     _slideCtrl.forward();
+
+    _parseResponse();
+
+    // Auto-speak the explanation after a short delay
+    Future.delayed(const Duration(milliseconds: 1200), () {
+      if (mounted) {
+        final textToSpeak = _isParsed && _explanation.isNotEmpty
+            ? _explanation
+            : widget.aiResponse;
+        _speakText(textToSpeak);
+      }
+    });
+  }
+
+  void _parseResponse() {
+    try {
+      final parsed = jsonDecode(widget.aiResponse);
+      if (parsed is Map<String, dynamic>) {
+        setState(() {
+          _explanation = parsed['explanation'] as String? ?? '';
+          _urgency = parsed['urgency'] as String? ?? '';
+          _uncertainty = parsed['uncertainty'] as String? ?? '';
+          _safeNextSteps = (parsed['safeNextSteps'] as List<dynamic>?)
+                  ?.map((e) => e.toString())
+                  .toList() ??
+              [];
+          _warningSigns = (parsed['warningSigns'] as List<dynamic>?)
+                  ?.map((e) => e.toString())
+                  .toList() ??
+              [];
+          _doctorVisitGuidance =
+              parsed['doctorVisitGuidance'] as String? ?? '';
+          _homeRemedies = (parsed['homeRemedies'] as List<dynamic>?)
+                  ?.map((e) => Map<String, String>.from(
+                      (e as Map).map((k, v) => MapEntry(k.toString(), v.toString()))))
+                  .toList() ??
+              [];
+          _isParsed = true;
+        });
+      }
+    } catch (_) {
+      // Response is plain text, not JSON
+      _isParsed = false;
+    }
   }
 
   @override
   void dispose() {
     _fadeCtrl.dispose();
     _slideCtrl.dispose();
+    _voice.stop();
     super.dispose();
   }
 
-  Color _statusColor(String s) => switch (s) {
-        'low' => AppTheme.errorColor,
-        'high' => AppTheme.warningColor,
+  Future<void> _speakText(String text) async {
+    if (_isSpeaking) {
+      await _voice.stop();
+      setState(() => _isSpeaking = false);
+      return;
+    }
+    setState(() => _isSpeaking = true);
+    await _voice.speak(text, onComplete: () {
+      if (mounted) setState(() => _isSpeaking = false);
+    });
+  }
+
+  Color _urgencyColor(String u) => switch (u) {
+        'urgent' => AppTheme.errorColor,
+        'soon' => AppTheme.warningColor,
         _ => AppTheme.successColor,
       };
 
-  String _statusLabel(String s) => switch (s) {
-        'low' => 'Below Normal',
-        'high' => 'Above Normal',
-        _ => 'Normal',
+  IconData _urgencyIcon(String u) => switch (u) {
+        'urgent' => Icons.error_rounded,
+        'soon' => Icons.warning_amber_rounded,
+        _ => Icons.check_circle_rounded,
       };
 
-  IconData _statusIcon(String s) => switch (s) {
-        'low' => Icons.arrow_downward_rounded,
-        'high' => Icons.arrow_upward_rounded,
-        _ => Icons.check_circle_rounded,
+  String _urgencyLabel(String u) => switch (u) {
+        'urgent' => 'Urgent — Seek care immediately',
+        'soon' => 'Visit a doctor soon',
+        _ => 'Self-care — Monitor at home',
       };
 
   @override
   Widget build(BuildContext context) {
-    final normalCount = _findings.where((f) => f['status'] == 'normal').length;
-    final overallScore = normalCount / _findings.length;
-
     return Scaffold(
       backgroundColor: AppTheme.bgColor,
       body: FadeTransition(
@@ -123,7 +147,7 @@ class _ResultScreenState extends State<ResultScreen>
         child: CustomScrollView(
           slivers: [
             SliverAppBar(
-              expandedHeight: 190,
+              expandedHeight: 140,
               pinned: true,
               backgroundColor: AppTheme.bgSecondary,
               leading: IconButton(
@@ -139,18 +163,26 @@ class _ResultScreenState extends State<ResultScreen>
                 ),
               ),
               actions: [
-                IconButton(
-                  icon: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withAlpha(25),
-                      borderRadius: BorderRadius.circular(10),
+                if (widget.sessionId != null)
+                  IconButton(
+                    icon: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        gradient: AppTheme.primaryGradient,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.chat_rounded,
+                          size: 16, color: Colors.white),
                     ),
-                    child: const Icon(Icons.share_rounded,
-                        size: 16, color: Colors.white),
+                    onPressed: () {
+                      Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => ChatScreen(
+                          sessionId: widget.sessionId!,
+                          initialResponse: widget.aiResponse,
+                        ),
+                      ));
+                    },
                   ),
-                  onPressed: () {},
-                ),
                 const SizedBox(width: 8),
               ],
               flexibleSpace: FlexibleSpaceBar(
@@ -159,7 +191,9 @@ class _ResultScreenState extends State<ResultScreen>
                     gradient: LinearGradient(
                       colors: [
                         AppTheme.bgSecondary,
-                        AppTheme.primaryColor.withAlpha(76),
+                        _isParsed
+                            ? _urgencyColor(_urgency).withAlpha(50)
+                            : AppTheme.primaryColor.withAlpha(76),
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -170,57 +204,33 @@ class _ResultScreenState extends State<ResultScreen>
                       padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
                       child: Row(
                         children: [
-                          CircularPercentIndicator(
-                            radius: 48,
-                            lineWidth: 7,
-                            percent: overallScore,
-                            center: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text('${(overallScore * 100).toInt()}%',
-                                    style: GoogleFonts.inter(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w800,
-                                        color: AppTheme.textPrimary)),
-                                Text('Good',
-                                    style: GoogleFonts.inter(
-                                        fontSize: 10,
-                                        color: AppTheme.successColor)),
-                              ],
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              gradient: AppTheme.primaryGradient,
+                              borderRadius: BorderRadius.circular(16),
                             ),
-                            progressColor: AppTheme.successColor,
-                            backgroundColor: AppTheme.borderColor,
-                            circularStrokeCap: CircularStrokeCap.round,
+                            child: const Icon(Icons.auto_awesome_rounded,
+                                color: Colors.white, size: 28),
                           ),
-                          const SizedBox(width: 20),
+                          const SizedBox(width: 16),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text('Blood Test Report',
+                                Text('AI Analysis Complete',
                                     style: GoogleFonts.inter(
                                         fontSize: 18,
                                         fontWeight: FontWeight.w700,
                                         color: AppTheme.textPrimary)),
                                 const SizedBox(height: 4),
-                                Text('Analysed on Apr 10, 2026',
+                                Text(
+                                    'Model: ${widget.model ?? 'LLaMA 3.1'}',
                                     style: GoogleFonts.inter(
                                         fontSize: 12,
                                         color: AppTheme.textSecondary)),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    _Chip(
-                                        label: '$normalCount Normal',
-                                        color: AppTheme.successColor),
-                                    const SizedBox(width: 8),
-                                    _Chip(
-                                        label:
-                                            '${_findings.length - normalCount} Attention',
-                                        color: AppTheme.warningColor),
-                                  ],
-                                ),
                               ],
                             ),
                           ),
@@ -239,195 +249,280 @@ class _ResultScreenState extends State<ResultScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // AI Summary
-                      Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(colors: [
-                            AppTheme.accentColor.withAlpha(38),
-                            AppTheme.primaryColor.withAlpha(25),
-                          ]),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                              color: AppTheme.accentColor.withAlpha(76)),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                gradient: AppTheme.primaryGradient,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(Icons.auto_awesome_rounded,
-                                  color: Colors.white, size: 18),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('AI Summary',
-                                      style: GoogleFonts.inter(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppTheme.textPrimary)),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'Your overall health looks good! Most values are within normal range. Hemoglobin is slightly low — manageable with dietary changes. WBC is marginally elevated, possibly indicating a minor infection. No immediate cause for concern.',
+                      // Urgency banner
+                      if (_isParsed && _urgency.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: _urgencyColor(_urgency).withAlpha(20),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                                color: _urgencyColor(_urgency).withAlpha(76)),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(_urgencyIcon(_urgency),
+                                  color: _urgencyColor(_urgency), size: 24),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(_urgencyLabel(_urgency),
                                     style: GoogleFonts.inter(
-                                        fontSize: 13,
-                                        color: AppTheme.textSecondary,
-                                        height: 1.6),
-                                  ),
-                                ],
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: _urgencyColor(_urgency))),
                               ),
+                            ],
+                          ),
+                        ),
+
+                      // AI Summary / Explanation
+                      _SectionCard(
+                        icon: Icons.auto_awesome_rounded,
+                        title: 'AI Explanation',
+                        gradient: true,
+                        trailing: GestureDetector(
+                          onTap: () => _speakText(
+                              _isParsed ? _explanation : widget.aiResponse),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: _isSpeaking
+                                  ? AppTheme.primaryColor.withAlpha(40)
+                                  : Colors.white.withAlpha(15),
+                              borderRadius: BorderRadius.circular(10),
                             ),
-                          ],
+                            child: Icon(
+                              _isSpeaking
+                                  ? Icons.stop_rounded
+                                  : Icons.volume_up_rounded,
+                              size: 18,
+                              color: _isSpeaking
+                                  ? AppTheme.primaryColor
+                                  : AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                        child: SelectableText(
+                          _isParsed
+                              ? _explanation
+                              : widget.aiResponse,
+                          style: GoogleFonts.inter(
+                              fontSize: 13,
+                              color: AppTheme.textSecondary,
+                              height: 1.6),
                         ),
                       ),
-                      const SizedBox(height: 24),
-                      Text('Detailed Results',
-                          style: GoogleFonts.inter(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.textPrimary)),
                       const SizedBox(height: 14),
 
-                      // Finding cards
-                      ...List.generate(_findings.length, (i) {
-                        final f = _findings[i];
-                        final isExp = _expandedIndex == i;
-                        final col = f['color'] as Color;
-                        final status = f['status'] as String;
-                        return GestureDetector(
-                          onTap: () =>
-                              setState(() => _expandedIndex = isExp ? -1 : i),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 300),
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: AppTheme.bgCard,
-                              borderRadius: BorderRadius.circular(18),
-                              border: Border.all(
-                                color: isExp
-                                    ? col.withAlpha(128)
-                                    : AppTheme.borderColor,
-                              ),
-                              boxShadow: isExp
-                                  ? [BoxShadow(
-                                      color: col.withAlpha(25),
-                                      blurRadius: 20)]
-                                  : null,
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 44,
-                                      height: 44,
-                                      decoration: BoxDecoration(
-                                        color: col.withAlpha(30),
-                                        borderRadius: BorderRadius.circular(12),
+                      // Uncertainty
+                      if (_isParsed && _uncertainty.isNotEmpty) ...[
+                        _SectionCard(
+                          icon: Icons.help_outline_rounded,
+                          title: 'What We\'re Uncertain About',
+                          color: AppTheme.infoColor,
+                          child: Text(_uncertainty,
+                              style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: AppTheme.textSecondary,
+                                  height: 1.6)),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+
+                      // Safe Next Steps
+                      if (_isParsed && _safeNextSteps.isNotEmpty) ...[
+                        _SectionCard(
+                          icon: Icons.checklist_rounded,
+                          title: 'Safe Next Steps',
+                          color: AppTheme.successColor,
+                          child: Column(
+                            children: _safeNextSteps
+                                .asMap()
+                                .entries
+                                .map((e) => Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Container(
+                                            width: 22,
+                                            height: 22,
+                                            margin: const EdgeInsets.only(
+                                                right: 10),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.successColor
+                                                  .withAlpha(30),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Center(
+                                              child: Text('${e.key + 1}',
+                                                  style: GoogleFonts.inter(
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: AppTheme
+                                                          .successColor)),
+                                            ),
+                                          ),
+                                          Expanded(
+                                            child: Text(e.value,
+                                                style: GoogleFonts.inter(
+                                                    fontSize: 13,
+                                                    color:
+                                                        AppTheme.textSecondary,
+                                                    height: 1.5)),
+                                          ),
+                                        ],
                                       ),
-                                      child: Icon(f['icon'] as IconData,
-                                          color: col, size: 22),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
+                                    ))
+                                .toList(),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+
+                      // Warning Signs
+                      if (_isParsed && _warningSigns.isNotEmpty) ...[
+                        _SectionCard(
+                          icon: Icons.warning_amber_rounded,
+                          title: 'Warning Signs to Watch',
+                          color: AppTheme.warningColor,
+                          child: Column(
+                            children: _warningSigns
+                                .map((s) => Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: Row(
+                                        children: [
+                                          const Icon(
+                                              Icons.priority_high_rounded,
+                                              color: AppTheme.warningColor,
+                                              size: 16),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Text(s,
+                                                style: GoogleFonts.inter(
+                                                    fontSize: 13,
+                                                    color:
+                                                        AppTheme.textSecondary,
+                                                    height: 1.5)),
+                                          ),
+                                        ],
+                                      ),
+                                    ))
+                                .toList(),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+
+                      // Doctor Visit Guidance
+                      if (_isParsed && _doctorVisitGuidance.isNotEmpty) ...[
+                        _SectionCard(
+                          icon: Icons.local_hospital_rounded,
+                          title: 'Doctor Visit Guidance',
+                          color: AppTheme.primaryColor,
+                          child: Text(_doctorVisitGuidance,
+                              style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: AppTheme.textSecondary,
+                                  height: 1.6)),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+
+                      // Home Remedies
+                      if (_isParsed && _homeRemedies.isNotEmpty) ...[
+                        _SectionCard(
+                          icon: Icons.spa_rounded,
+                          title: 'Home Remedies',
+                          color: const Color(0xFF00C6AE),
+                          child: Column(
+                            children: _homeRemedies
+                                .map((r) => Container(
+                                      margin: const EdgeInsets.only(bottom: 10),
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.bgCardLight,
+                                        borderRadius:
+                                            BorderRadius.circular(12),
+                                        border: Border.all(
+                                            color: AppTheme.borderColor),
+                                      ),
                                       child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          Text(f['name'] as String,
+                                          Text(r['remedy'] ?? '',
                                               style: GoogleFonts.inter(
                                                   fontSize: 13,
                                                   fontWeight: FontWeight.w600,
-                                                  color: AppTheme.textPrimary)),
-                                          const SizedBox(height: 2),
-                                          Text('Normal: ${f['normalRange']}',
+                                                  color:
+                                                      AppTheme.textPrimary)),
+                                          const SizedBox(height: 4),
+                                          Text(r['instruction'] ?? '',
                                               style: GoogleFonts.inter(
-                                                  fontSize: 11,
-                                                  color: AppTheme.textSecondary)),
+                                                  fontSize: 12,
+                                                  color:
+                                                      AppTheme.textSecondary,
+                                                  height: 1.5)),
                                         ],
                                       ),
-                                    ),
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
-                                      children: [
-                                        Text(f['value'] as String,
-                                            style: GoogleFonts.inter(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w700,
-                                                color: _statusColor(status))),
-                                        const SizedBox(height: 4),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 3),
-                                          decoration: BoxDecoration(
-                                            color: _statusColor(status)
-                                                .withAlpha(30),
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(_statusIcon(status),
-                                                  size: 10,
-                                                  color: _statusColor(status)),
-                                              const SizedBox(width: 3),
-                                              Text(_statusLabel(status),
-                                                  style: GoogleFonts.inter(
-                                                      fontSize: 10,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                      color:
-                                                          _statusColor(status))),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
+                                    ))
+                                .toList(),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+
+                      // Chat follow-up button
+                      if (widget.sessionId != null) ...[
+                        const SizedBox(height: 8),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.of(context).push(MaterialPageRoute(
+                              builder: (_) => ChatScreen(
+                                sessionId: widget.sessionId!,
+                                initialResponse: widget.aiResponse,
+                              ),
+                            ));
+                          },
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            decoration: BoxDecoration(
+                              gradient: AppTheme.primaryGradient,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppTheme.primaryColor.withAlpha(80),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 6),
                                 ),
-                                const SizedBox(height: 12),
-                                LinearPercentIndicator(
-                                  percent: (f['percent'] as double).clamp(0, 1),
-                                  lineHeight: 6,
-                                  progressColor: _statusColor(status),
-                                  backgroundColor: AppTheme.borderColor,
-                                  barRadius: const Radius.circular(3),
-                                  padding: EdgeInsets.zero,
-                                ),
-                                if (isExp) ...[
-                                  const SizedBox(height: 16),
-                                  const Divider(
-                                      color: AppTheme.borderColor, height: 1),
-                                  const SizedBox(height: 16),
-                                  _InfoBlock(
-                                      icon: Icons.info_outline_rounded,
-                                      title: 'What does this mean?',
-                                      content: f['explanation'] as String,
-                                      color: AppTheme.infoColor),
-                                  const SizedBox(height: 12),
-                                  _InfoBlock(
-                                      icon: Icons.recommend_rounded,
-                                      title: 'Recommendation',
-                                      content: f['recommendation'] as String,
-                                      color: AppTheme.successColor),
-                                ],
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.chat_rounded,
+                                    color: Colors.white, size: 20),
+                                const SizedBox(width: 10),
+                                Text('Ask Follow-Up Questions',
+                                    style: GoogleFonts.inter(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white)),
                               ],
                             ),
                           ),
-                        );
-                      }),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
 
-                      const SizedBox(height: 20),
-                      // Disclaimer
+                      // Safety disclaimer
                       Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
@@ -443,7 +538,8 @@ class _ResultScreenState extends State<ResultScreen>
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                'AI-generated analysis for informational purposes only. Always consult a qualified healthcare professional.',
+                                widget.safetyNotice ??
+                                    'AI-generated analysis for informational purposes only. Always consult a qualified healthcare professional.',
                                 style: GoogleFonts.inter(
                                     fontSize: 11,
                                     color: AppTheme.warningColor,
@@ -466,63 +562,68 @@ class _ResultScreenState extends State<ResultScreen>
   }
 }
 
-class _Chip extends StatelessWidget {
-  final String label;
-  final Color color;
-  const _Chip({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-    decoration: BoxDecoration(
-      color: color.withAlpha(30),
-      borderRadius: BorderRadius.circular(8),
-    ),
-    child: Text(label,
-        style: GoogleFonts.inter(
-            fontSize: 11, fontWeight: FontWeight.w500, color: color)),
-  );
-}
-
-class _InfoBlock extends StatelessWidget {
+class _SectionCard extends StatelessWidget {
   final IconData icon;
   final String title;
-  final String content;
-  final Color color;
-  const _InfoBlock({required this.icon, required this.title,
-      required this.content, required this.color});
+  final Widget child;
+  final Color? color;
+  final bool gradient;
+  final Widget? trailing;
+
+  const _SectionCard({
+    required this.icon,
+    required this.title,
+    required this.child,
+    this.color,
+    this.gradient = false,
+    this.trailing,
+  });
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: color.withAlpha(20),
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: color, size: 16),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) {
+    final c = color ?? AppTheme.primaryColor;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: gradient
+            ? LinearGradient(colors: [
+                AppTheme.accentColor.withAlpha(38),
+                AppTheme.primaryColor.withAlpha(25),
+              ])
+            : null,
+        color: gradient ? null : c.withAlpha(12),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: c.withAlpha(50)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Text(title,
-                  style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: color)),
-              const SizedBox(height: 4),
-              Text(content,
-                  style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: AppTheme.textSecondary,
-                      height: 1.5)),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: c.withAlpha(30),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: c, size: 18),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(title,
+                    style: GoogleFonts.inter(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary)),
+              ),
+              if (trailing != null) trailing!,
             ],
           ),
-        ),
-      ],
-    ),
-  );
+          const SizedBox(height: 14),
+          child,
+        ],
+      ),
+    );
+  }
 }
+

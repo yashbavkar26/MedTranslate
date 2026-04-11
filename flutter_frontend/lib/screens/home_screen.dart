@@ -1,9 +1,16 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:file_picker/file_picker.dart';
 import '../theme/app_theme.dart';
+import '../services/api_service.dart';
+import '../services/voice_service.dart';
 import 'result_screen.dart';
+import 'chat_screen.dart';
 import 'profile_screen.dart';
 import 'history_screen.dart';
+import 'dart:convert';
+import '../services/history_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,38 +25,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _isAnalyzing = false;
   final _textController = TextEditingController();
   String? _selectedFileName;
+  File? _selectedFile;
+  bool _isListening = false;
+  final _voice = VoiceService.instance;
+
+  // Chat sessions
+  String? _activeSessionId;
+  String? _activeSessionResponse;
 
   late AnimationController _fadeCtrl;
   late AnimationController _pulseCtrl;
   late Animation<double> _fade;
   late Animation<double> _pulse;
 
-  static const _recentReports = [
-    {
-      'title': 'Blood Test Report',
-      'date': 'Apr 8, 2026',
-      'status': 'Analyzed',
-      'icon': Icons.bloodtype_rounded,
-      'color': Color(0xFFFF6B6B),
-      'summary': 'Hemoglobin slightly low — check iron intake',
-    },
-    {
-      'title': 'MRI Scan Report',
-      'date': 'Mar 25, 2026',
-      'status': 'Analyzed',
-      'icon': Icons.document_scanner_rounded,
-      'color': Color(0xFF6C63FF),
-      'summary': 'No critical findings. Minor L4-L5 disc bulge.',
-    },
-    {
-      'title': 'Thyroid Panel',
-      'date': 'Mar 10, 2026',
-      'status': 'Analyzed',
-      'icon': Icons.science_rounded,
-      'color': Color(0xFF00C6AE),
-      'summary': 'TSH within normal range. All clear.',
-    },
-  ];
+  List<Map<String, dynamic>> _recentReports = [];
 
   static const _stats = [
     {'label': 'Reports', 'value': '12', 'icon': Icons.description_rounded, 'color': Color(0xFF6C63FF)},
@@ -60,6 +49,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _loadRecentReports();
     _fadeCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 700));
     _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))
       ..repeat(reverse: true);
@@ -67,6 +57,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _pulse = Tween<double>(begin: 0.97, end: 1.03)
         .animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
     _fadeCtrl.forward();
+  }
+
+  Future<void> _loadRecentReports() async {
+    final reports = await HistoryService.getReports();
+    if (mounted) {
+      setState(() {
+        _recentReports = reports.take(3).toList();
+      });
+    }
   }
 
   @override
@@ -77,20 +76,92 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  Future<void> _saveToHistory(String response, int mode) async {
+    try {
+      final decoded = jsonDecode(response);
+      final report = {
+        'title': mode == 0 ? 'Text Analysis' : 'PDF Document Upload',
+        'date': DateTime.now().toString().split(' ')[0], // simple date string YYYY-MM-DD
+        'type': mode == 0 ? 'Text' : 'PDF',
+        'explanation': decoded['explanation'] ?? '',
+        'urgency': decoded['urgency'] ?? 'self_care',
+        'score': decoded['urgency'] == 'urgent' ? 60 : (decoded['urgency'] == 'soon' ? 80 : 95),
+        'tags': decoded['affectedBodyParts'] ?? [],
+      };
+      await HistoryService.saveReport(report);
+    } catch (e) {
+      // If parsing fails or anything goes wrong, we just don't save history, or save a generic one to avoid crashing
+      final report = {
+        'title': mode == 0 ? 'Text Analysis' : 'PDF Document Upload',
+        'date': DateTime.now().toString().split(' ')[0],
+        'type': mode == 0 ? 'Text' : 'PDF',
+        'explanation': 'Result format unavailable for history short-summary.',
+        'urgency': 'soon',
+        'score': 85,
+        'tags': [],
+      };
+      await HistoryService.saveReport(report);
+    }
+  }
+
   Future<void> _analyze() async {
     if (_inputMode == 0 && _textController.text.trim().isEmpty) {
       _showSnack('Please enter medical text to analyze');
       return;
     }
-    if (_inputMode == 1 && _selectedFileName == null) {
+    if (_inputMode == 1 && _selectedFile == null) {
       _showSnack('Please select a PDF file');
       return;
     }
+
     setState(() => _isAnalyzing = true);
-    await Future.delayed(const Duration(seconds: 3));
-    if (mounted) {
-      setState(() => _isAnalyzing = false);
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ResultScreen()));
+
+    try {
+      Map<String, dynamic> result;
+
+      if (_inputMode == 0) {
+        // Text analyze mode
+        result = await ApiService.analyzeText(_textController.text.trim());
+        if (mounted) {
+          final aiResponse = result['response'] as String? ?? 'No response';
+          _saveToHistory(aiResponse, 0); // background save
+          setState(() => _isAnalyzing = false);
+          Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => ResultScreen(
+              aiResponse: result['response'] as String? ?? 'No response',
+              safetyNotice: result['safetyNotice'] as String?,
+              model: result['model'] as String?,
+            ),
+          ));
+        }
+      } else {
+        // PDF upload mode
+        result = await ApiService.uploadReport(_selectedFile!);
+        final sessionId = result['sessionId'] as String?;
+        final response = result['response'] as String? ?? 'No response';
+
+        if (mounted) {
+          _saveToHistory(response, 1); // background save
+          setState(() {
+            _isAnalyzing = false;
+            _activeSessionId = sessionId;
+            _activeSessionResponse = response;
+          });
+          Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => ResultScreen(
+              aiResponse: response,
+              safetyNotice: result['safetyNotice'] as String?,
+              model: result['model'] as String?,
+              sessionId: sessionId,
+            ),
+          ));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isAnalyzing = false);
+        _showSnack('Error: ${e.toString()}');
+      }
     }
   }
 
@@ -103,7 +174,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     ));
   }
 
-  void _pickFile() => setState(() => _selectedFileName = 'blood_report_apr2026.pdf');
+  Future<void> _pickFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+      if (result != null && result.files.single.path != null) {
+        setState(() {
+          _selectedFileName = result.files.single.name;
+          _selectedFile = File(result.files.single.path!);
+        });
+      }
+    } catch (e) {
+      _showSnack('Error picking file: $e');
+    }
+  }
 
   // ── HOME TAB ────────────────────────────────────────────────
   Widget _buildHome() {
@@ -133,7 +219,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Hello, Geetesh 👋',
+                            Text('Hello, Yash 👋',
                                 style: GoogleFonts.inter(
                                     fontSize: 22,
                                     fontWeight: FontWeight.w700,
@@ -153,7 +239,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: const Center(
-                          child: Text('G',
+                          child: Text('Y',
                               style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 18,
@@ -367,32 +453,179 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  // ── CHAT TAB ────────────────────────────────────────────────
+  Widget _buildChatTab() {
+    if (_activeSessionId != null && _activeSessionResponse != null) {
+      return ChatScreen(
+        sessionId: _activeSessionId!,
+        initialResponse: _activeSessionResponse!,
+      );
+    }
+
+    // No active session — show prompt
+    return Center(
+      child: FadeTransition(
+        opacity: _fade,
+        child: Padding(
+          padding: const EdgeInsets.all(40),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: [
+                    AppTheme.primaryColor.withAlpha(40),
+                    AppTheme.accentColor.withAlpha(40),
+                  ]),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Icon(Icons.chat_rounded,
+                    color: AppTheme.primaryColor, size: 36),
+              ),
+              const SizedBox(height: 24),
+              Text('No Active Chat Session',
+                  style: GoogleFonts.inter(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary)),
+              const SizedBox(height: 10),
+              Text(
+                'Upload a PDF report first to start a chat session. You can then ask follow-up questions about your report.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: AppTheme.textSecondary,
+                    height: 1.6),
+              ),
+              const SizedBox(height: 28),
+              GestureDetector(
+                onTap: () => setState(() => _selectedIndex = 0),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.primaryGradient,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.primaryColor.withAlpha(80),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.upload_file_rounded,
+                          color: Colors.white, size: 18),
+                      const SizedBox(width: 10),
+                      Text('Upload Report',
+                          style: GoogleFonts.inter(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleListening() async {
+    if (_isListening) {
+      await _voice.stopListening();
+      setState(() => _isListening = false);
+    } else {
+      await _voice.startListening(
+        onResult: (text) {
+          if (mounted) setState(() => _textController.text = text);
+        },
+        onListeningStarted: () {
+          if (mounted) setState(() => _isListening = true);
+        },
+        onListeningStopped: () {
+          if (mounted) setState(() => _isListening = false);
+        },
+      );
+      setState(() => _isListening = true);
+    }
+  }
+
   Widget _buildTextInput() {
     return Container(
       key: const ValueKey('text'),
       decoration: BoxDecoration(
         color: AppTheme.bgCard,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.borderColor),
+        border: Border.all(
+          color: _isListening ? AppTheme.errorColor : AppTheme.borderColor,
+        ),
       ),
       child: Column(
         children: [
-          TextField(
-            controller: _textController,
-            maxLines: 8,
-            style: GoogleFonts.inter(
-                fontSize: 14, color: AppTheme.textPrimary, height: 1.6),
-            decoration: InputDecoration(
-              hintText:
-                  'Paste your medical report text here...\n\nExample: "Hemoglobin: 10.5 g/dL (Normal: 12-16), WBC: 11.2 K/μL..."',
-              hintStyle: GoogleFonts.inter(
-                  fontSize: 13,
-                  color: AppTheme.textSecondary,
-                  height: 1.6),
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.all(16),
-              filled: false,
-            ),
+          Stack(
+            children: [
+              TextField(
+                controller: _textController,
+                maxLines: 8,
+                style: GoogleFonts.inter(
+                    fontSize: 14, color: AppTheme.textPrimary, height: 1.6),
+                decoration: InputDecoration(
+                  hintText: _isListening
+                      ? 'Listening... speak now 🎙️'
+                      : 'Paste your medical report text here...\n\nExample: "Hemoglobin: 10.5 g/dL (Normal: 12-16), WBC: 11.2 K/μL..."',
+                  hintStyle: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: _isListening
+                          ? AppTheme.errorColor
+                          : AppTheme.textSecondary,
+                      height: 1.6),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.all(16),
+                  filled: false,
+                ),
+              ),
+              Positioned(
+                right: 8,
+                top: 8,
+                child: GestureDetector(
+                  onTap: _toggleListening,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      gradient: _isListening
+                          ? const LinearGradient(
+                              colors: [Color(0xFFFF6B6B), Color(0xFFFF9F43)])
+                          : AppTheme.primaryGradient,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (_isListening
+                                  ? AppTheme.errorColor
+                                  : AppTheme.primaryColor)
+                              .withAlpha(80),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      _isListening ? Icons.stop_rounded : Icons.mic_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -408,9 +641,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 const Icon(Icons.info_outline_rounded,
                     size: 14, color: AppTheme.textSecondary),
                 const SizedBox(width: 6),
-                Text('Supports: Lab Reports, Prescriptions, Medical Notes',
-                    style: GoogleFonts.inter(
-                        fontSize: 11, color: AppTheme.textSecondary)),
+                Expanded(
+                  child: Text('Supports: Lab Reports, Prescriptions, or tap 🎙️ to speak',
+                      style: GoogleFonts.inter(
+                          fontSize: 11, color: AppTheme.textSecondary)),
+                ),
               ],
             ),
           ),
@@ -505,7 +740,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final screens = [_buildHome(), const HistoryScreen(), const ProfileScreen()];
+    final screens = [
+      _buildHome(),
+      _buildChatTab(),
+      const HistoryScreen(),
+      const ProfileScreen(),
+    ];
     return Scaffold(
       backgroundColor: AppTheme.bgColor,
       body: screens[_selectedIndex],
@@ -524,12 +764,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 _NavItem(icon: Icons.home_rounded, label: 'Home',
                     isSelected: _selectedIndex == 0,
                     onTap: () => setState(() => _selectedIndex = 0)),
-                _NavItem(icon: Icons.history_rounded, label: 'History',
+                _NavItem(icon: Icons.chat_rounded, label: 'Chat',
                     isSelected: _selectedIndex == 1,
                     onTap: () => setState(() => _selectedIndex = 1)),
-                _NavItem(icon: Icons.person_rounded, label: 'Profile',
+                _NavItem(icon: Icons.history_rounded, label: 'History',
                     isSelected: _selectedIndex == 2,
                     onTap: () => setState(() => _selectedIndex = 2)),
+                _NavItem(icon: Icons.person_rounded, label: 'Profile',
+                    isSelected: _selectedIndex == 3,
+                    onTap: () => setState(() => _selectedIndex = 3)),
               ],
             ),
           ),
@@ -582,8 +825,25 @@ class _ReportCard extends StatelessWidget {
   final Map<String, dynamic> report;
   const _ReportCard({required this.report});
 
+  IconData _getIconForType(String urgency) {
+    if (urgency == 'urgent') return Icons.warning_rounded;
+    if (urgency == 'soon') return Icons.info_outline_rounded;
+    return Icons.check_circle_outline_rounded;
+  }
+
+  Color _getColorForScore(int score) {
+    if (score >= 90) return AppTheme.successColor;
+    if (score >= 70) return AppTheme.warningColor;
+    return AppTheme.errorColor;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final urgency = report['urgency'] as String? ?? 'self_care';
+    final score = report['score'] as int? ?? 0;
+    final color = _getColorForScore(score);
+    final icon = _getIconForType(urgency);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -598,30 +858,29 @@ class _ReportCard extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: (report['color'] as Color).withAlpha(30),
+              color: color.withAlpha(30),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(report['icon'] as IconData,
-                color: report['color'] as Color, size: 24),
+            child: Icon(icon, color: color, size: 24),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(report['title'] as String,
+                Text(report['title'] as String? ?? 'Report',
                     style: GoogleFonts.inter(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         color: AppTheme.textPrimary)),
                 const SizedBox(height: 3),
-                Text(report['summary'] as String,
+                Text(report['explanation'] as String? ?? 'Analysis complete',
                     style: GoogleFonts.inter(
                         fontSize: 12, color: AppTheme.textSecondary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 4),
-                Text(report['date'] as String,
+                Text(report['date'] as String? ?? '',
                     style: GoogleFonts.inter(
                         fontSize: 11,
                         color: AppTheme.textSecondary.withAlpha(153))),
@@ -634,7 +893,7 @@ class _ReportCard extends StatelessWidget {
               color: AppTheme.successColor.withAlpha(30),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Text(report['status'] as String,
+            child: Text('Analyzed',
                 style: GoogleFonts.inter(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
