@@ -23,3 +23,12 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+
+dataset/
+*.jpg
+*.jpeg
+*.png
+*.gif
+dermnet/
+ai_model/dataset/
+ai_model/dermnet/
